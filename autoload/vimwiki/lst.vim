@@ -149,6 +149,7 @@ endfunction "}}}
 "type - 1 for bulleted item, 2 for numbered item, 0 for a regular line
 "mrkr - the concrete marker, e.g. '**' or 'b)'
 "cb   - the char in the checkbox or '' if there is no checkbox
+"cbf  - the fraction of completed children of a checkbox or '' if no checkbox
 function! s:get_item(lnum) "{{{
   let item = {'lnum': a:lnum}
   if a:lnum == 0 || a:lnum > line('$')
@@ -696,6 +697,15 @@ function! s:get_rate(item) "{{{
   return index(g:vimwiki_listsyms_list, state) * 25
 endfunction "}}}
 
+"Returns: the rate of checkboxed list item in fraction
+function! s:get_fraction(item) "{{{
+  if a:item.type == 0 || a:item.cb == ''
+    return -1
+  endif
+  let state = a:item.cb
+  return index(g:vimwiki_listsyms_list, state) * 25
+endfunction "}}}
+
 "Set state of the list item to [ ] or [o] or whatever
 "Returns: 1 if the state changed, 0 otherwise
 function! s:set_state(item, new_rate) "{{{
@@ -703,6 +713,18 @@ function! s:set_state(item, new_rate) "{{{
   let old_state = s:rate_to_state(s:get_rate(a:item))
   if new_state !=# old_state
     call s:substitute_rx_in_line(a:item.lnum, '\[.]', '['.new_state.']')
+    return 1
+  else
+    return 0
+  endif
+endfunction "}}}
+
+"Set fraction of the list item to [0/2] or whatever
+"Returns: 1 if the state changed, 0 otherwise
+function! s:set_fraction(item, new_fraction) "{{{
+  let old_fraction = get_fraction(a:item)
+  if a:new_fraction !=# old_fraction
+    call s:substitute_rx_in_line(a:item.lnum, '\[.]', '['.new_fraction.']')
     return 1
   else
     return 0
@@ -776,6 +798,32 @@ function! s:update_state(item) "{{{
     endif
   endif
 endfunction "}}}
+
+"updates the fraction of a checkboxed item according to completion of its
+"children
+function! s:update_fraction(item) "{{{
+  if a:item.type == 0 || a:item.cb == ''
+    return
+  endif
+
+  let count_children_with_cb = 0
+  let count_children_completed = 0
+
+  let child_item = s:get_first_child(a:item)
+
+  while 1
+    if child_item.type == 0
+      break
+    endif
+    if child_item.cb != ''
+      let count_children_with_cb += 1
+      if s:get_rate(child_item) == 100
+        let count_children_completed += 1
+      endif
+    endif
+    let child_item = s:get_next_child_item(a:item, child_item)
+  endwhile
+endfunction }}}"
 
 function! s:set_state_recursively(item, new_rate) "{{{
   let state_changed = s:set_state(a:item, a:new_rate)
